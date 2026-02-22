@@ -17,6 +17,7 @@ import { paymentRoutes } from './routes/payments';
 import { transactionRoutes } from './routes/transactions';
 import { merchantRoutes } from './routes/merchants';
 import { webhookRoutes } from './routes/webhooks';
+import { checkoutRoutes } from './routes/checkout';
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
@@ -113,9 +114,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(transactionRoutes);
     await app.register(merchantRoutes);
     await app.register(webhookRoutes);
+    await app.register(checkoutRoutes);
 
     // ─────────────────────────────────────
-    // Global error handler
+    // 404 & Error Handlinger
     // ─────────────────────────────────────
     app.setErrorHandler((error, request, reply) => {
         if (error instanceof ApiError) {
