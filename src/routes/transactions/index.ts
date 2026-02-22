@@ -27,7 +27,10 @@ export async function transactionRoutes(fastify: FastifyInstance) {
         const merchantId = request.merchant!.id;
         const isExport = parsed.data.export === 'csv';
 
-        const where: any = { merchant_id: merchantId };
+        const where: any = {
+            merchant_id: merchantId,
+            environment: request.merchant!.environment as any,
+        };
         if (status) where.status = status;
         if (from || to) {
             where.created_at = {};
@@ -53,14 +56,16 @@ export async function transactionRoutes(fastify: FastifyInstance) {
 
             // Build CSV
             const headers = 'Référence,Paiement,Canal,Type,Montant,Devise,Statut,Date\n';
-            const rows = transactions.map(t =>
-                `${t.transaction_ref},${t.payment.payment_ref},${t.payment.channel},${t.type},${Number(t.amount)},${t.currency},${t.status},${t.created_at.toISOString()}`
-            ).join('\n');
+            const csvData = transactions.map(t => {
+                const paymentRef = t.payment?.payment_ref || '';
+                const channel = t.payment?.channel || '';
+                return `${t.transaction_ref},${paymentRef},${channel},${t.type},${Number(t.amount)},${t.currency},${t.status},${t.created_at.toISOString()}`;
+            }).join('\n');
 
             reply
                 .header('Content-Type', 'text/csv; charset=utf-8')
                 .header('Content-Disposition', `attachment; filename=transactions_${new Date().toISOString().split('T')[0]}.csv`)
-                .send(headers + rows);
+                .send(headers + csvData);
             return;
         }
 
@@ -94,9 +99,9 @@ export async function transactionRoutes(fastify: FastifyInstance) {
         reply.send(successResponse(
             results.map(t => ({
                 transaction_ref: t.transaction_ref,
-                payment_ref: t.payment.payment_ref,
-                channel: t.payment.channel,
-                order_id: t.payment.order_id,
+                payment_ref: t.payment?.payment_ref || null,
+                channel: t.payment?.channel || null,
+                order_id: t.payment?.order_id || null,
                 type: t.type,
                 amount: Number(t.amount),
                 currency: t.currency,

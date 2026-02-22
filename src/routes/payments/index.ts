@@ -63,6 +63,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
             data: {
                 payment_ref: paymentRef,
                 merchant_id: merchantId,
+                environment: request.merchant!.environment as any,
                 order_id,
                 idempotency_key: idempotencyKey || null,
                 channel,
@@ -153,6 +154,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
             where: {
                 payment_ref: ref,
                 merchant_id: merchantId,
+                environment: request.merchant!.environment as any,
             },
             select: {
                 payment_ref: true,
@@ -211,7 +213,10 @@ export async function paymentRoutes(fastify: FastifyInstance) {
         const { status, channel, from, to, after, limit } = parsed.data;
         const merchantId = request.merchant!.id;
 
-        const where: any = { merchant_id: merchantId };
+        const where: any = {
+            merchant_id: merchantId,
+            environment: request.merchant!.environment as any,
+        };
         if (status) where.status = status;
         if (channel) where.channel = channel;
         if (from || to) {
@@ -284,7 +289,11 @@ export async function paymentRoutes(fastify: FastifyInstance) {
         const merchantId = request.merchant!.id;
 
         const payment = await prisma.payment.findFirst({
-            where: { payment_ref: ref, merchant_id: merchantId },
+            where: {
+                payment_ref: ref,
+                merchant_id: merchantId,
+                environment: request.merchant!.environment as any,
+            },
         });
 
         if (!payment) {
@@ -310,6 +319,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
                     transaction_ref: transactionRef,
                     payment_id: payment.id,
                     merchant_id: merchantId,
+                    environment: request.merchant!.environment as any,
                     type: 'refund',
                     status: 'completed',
                     amount,

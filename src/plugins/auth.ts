@@ -31,6 +31,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
         email: string;
         role: MerchantRole;
         type: string;
+        environment: string;
     };
     apiKey?: {
         id: string;
@@ -151,11 +152,16 @@ export const jwtAuth = async (request: AuthenticatedRequest, reply: FastifyReply
         throw new ApiError('MERCHANT_SUSPENDED');
     }
 
+    // Extract environment from header (sent by dashboard), default to 'live'
+    const envHeader = request.headers['x-dhecash-environment'];
+    const environment = typeof envHeader === 'string' && envHeader === 'test' ? 'test' : 'live';
+
     request.merchant = {
         id: merchant.id,
         email: merchant.email,
         role: merchant.role,
         type: merchant.type,
+        environment,
     };
 };
 
@@ -246,6 +252,7 @@ export const apiKeyAuth = async (request: AuthenticatedRequest, reply: FastifyRe
         email: foundKey.merchant.email,
         role: foundKey.merchant.role,
         type: foundKey.merchant.type,
+        environment: foundKey.environment,
     };
 };
 

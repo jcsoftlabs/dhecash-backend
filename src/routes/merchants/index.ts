@@ -229,20 +229,20 @@ export async function merchantRoutes(fastify: FastifyInstance) {
         const [todayRevenue, monthRevenue, totalTransactions, successRate] = await Promise.all([
             // Today's revenue
             prisma.payment.aggregate({
-                where: { merchant_id: merchantId, status: 'completed', completed_at: { gte: todayStart } },
+                where: { merchant_id: merchantId, environment: request.merchant!.environment as any, status: 'completed', completed_at: { gte: todayStart } },
                 _sum: { net_amount: true },
             }),
             // Month's revenue
             prisma.payment.aggregate({
-                where: { merchant_id: merchantId, status: 'completed', completed_at: { gte: monthStart } },
+                where: { merchant_id: merchantId, environment: request.merchant!.environment as any, status: 'completed', completed_at: { gte: monthStart } },
                 _sum: { net_amount: true },
             }),
             // Total transactions
-            prisma.payment.count({ where: { merchant_id: merchantId } }),
+            prisma.payment.count({ where: { merchant_id: merchantId, environment: request.merchant!.environment as any } }),
             // Success rate
             prisma.payment.groupBy({
                 by: ['status'],
-                where: { merchant_id: merchantId, created_at: { gte: monthStart } },
+                where: { merchant_id: merchantId, environment: request.merchant!.environment as any, created_at: { gte: monthStart } },
                 _count: true,
             }),
         ]);
@@ -270,6 +270,7 @@ export async function merchantRoutes(fastify: FastifyInstance) {
         const payments = await prisma.payment.findMany({
             where: {
                 merchant_id: merchantId,
+                environment: request.merchant!.environment as any,
                 status: 'completed',
                 completed_at: { gte: thirtyDaysAgo },
             },
@@ -304,7 +305,7 @@ export async function merchantRoutes(fastify: FastifyInstance) {
 
         const byChannel = await prisma.payment.groupBy({
             by: ['channel'],
-            where: { merchant_id: merchantId, status: 'completed', completed_at: { gte: monthStart } },
+            where: { merchant_id: merchantId, environment: request.merchant!.environment as any, status: 'completed', completed_at: { gte: monthStart } },
             _sum: { net_amount: true },
             _count: true,
         });

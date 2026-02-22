@@ -102,6 +102,59 @@ async function updatePaymentStatus(
                 },
             },
         });
+
+        // ─── Customer Synchronization ───
+        if (payment.customer_email || payment.customer_phone) {
+            // Find existing customer by email or phone for this merchant/environment
+            const customerWhere = [];
+            if (payment.customer_email) customerWhere.push({ email: payment.customer_email });
+            if (payment.customer_phone) customerWhere.push({ phone: payment.customer_phone });
+
+            let customer = await prisma.customer.findFirst({
+                where: {
+                    merchant_id: payment.merchant_id,
+                    environment: payment.environment,
+                    OR: customerWhere,
+                },
+            });
+
+            if (customer) {
+                // Update existing customer
+                await prisma.customer.update({
+                    where: { id: customer.id },
+                    data: {
+                        total_spent: { increment: Number(payment.amount) },
+                        payment_count: { increment: 1 },
+                        last_payment_at: new Date(),
+                        // Update name if we didn't have one before
+                        name: customer.name || payment.customer_name || null,
+                    },
+                });
+            } else {
+                // Create new customer
+                customer = await prisma.customer.create({
+                    data: {
+                        merchant_id: payment.merchant_id,
+                        environment: payment.environment,
+                        email: payment.customer_email,
+                        phone: payment.customer_phone,
+                        name: payment.customer_name,
+                        total_spent: Number(payment.amount),
+                        payment_count: 1,
+                        first_payment_at: new Date(),
+                        last_payment_at: new Date(),
+                    },
+                });
+            }
+
+            // Link payment to this customer
+            await prisma.payment.update({
+                where: { id: payment.id },
+                data: { customer_id: customer.id },
+            });
+
+            logger.info('Customer list mis à jour', { customer_id: customer.id, payment_ref: payment.payment_ref });
+        }
     }
 
     return payment.payment_ref;

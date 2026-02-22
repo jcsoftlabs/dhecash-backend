@@ -59,6 +59,21 @@ enum TransactionStatus {
   reversed
 }
 
+enum PayoutStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum InvoiceStatus {
+  draft
+  open
+  paid
+  void
+  uncollectible
+}
+
 enum Currency {
   HTG
   USD
@@ -95,43 +110,43 @@ enum MerchantRole {
 
 /// Merchant accounts — supports both individual and business types
 model Merchant {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email           String          @unique
-  password_hash   String          /// bcrypt hash (cost 12)
-  phone           String?
-  type            MerchantType
-  status          MerchantStatus  @default(pending)
-  role            MerchantRole    @default(owner)
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String         @unique
+  password_hash String /// bcrypt hash (cost 12)
+  phone         String?
+  type          MerchantType
+  status        MerchantStatus @default(pending)
+  role          MerchantRole   @default(owner)
 
   // Individual fields
-  first_name      String?
-  last_name       String?
-  nif             String?         /// Numéro d'Identification Fiscale
-  niu             String?         /// Numéro d'Identification Unique (individuals only)
+  first_name String?
+  last_name  String?
+  nif        String? /// Numéro d'Identification Fiscale
+  niu        String? /// Numéro d'Identification Unique (individuals only)
 
   // Business fields
-  business_name   String?         /// Nom commercial
-  legal_name      String?         /// Raison sociale
-  patente_number  String?         /// Numéro de Patente (businesses only)
-  business_type   String?         /// E-commerce, Commerce de détail, Services, etc.
+  business_name  String? /// Nom commercial
+  legal_name     String? /// Raison sociale
+  patente_number String? /// Numéro de Patente (businesses only)
+  business_type  String? /// E-commerce, Commerce de détail, Services, etc.
 
   // Address
-  address_street  String?
-  address_city    String?
+  address_street     String?
+  address_city       String?
   address_department String?
 
   // Bank details
-  bank_name       String?
+  bank_name           String?
   bank_account_number String?
   bank_account_holder String?
-  bank_iban       String?
+  bank_iban           String?
 
   // Metadata
-  email_verified  Boolean         @default(false)
-  email_verify_token String?
+  email_verified       Boolean   @default(false)
+  email_verify_token   String?
   email_verify_expires DateTime?
-  created_at      DateTime        @default(now())
-  updated_at      DateTime        @updatedAt
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
   // Relations
   api_keys        ApiKey[]
@@ -140,6 +155,9 @@ model Merchant {
   kyc_submissions KycSubmission[]
   webhook_configs WebhookConfig[]
   team_members    TeamMember[]
+  customers       Customer[]
+  payouts         Payout[]
+  invoices        Invoice[]
 
   @@index([email])
   @@index([status])
@@ -149,116 +167,128 @@ model Merchant {
 
 /// API keys for programmatic access — secrets stored as bcrypt hashes
 model ApiKey {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  merchant_id     String            @db.Uuid
-  key_id          String            @unique  /// Public key: pk_live_xxx or pk_test_xxx
-  secret_hash     String            /// bcrypt hash of sk_live_xxx or sk_test_xxx
-  secret_prefix   String            /// First 8 chars of secret payload (plaintext) for efficient lookup
-  environment     ApiKeyEnvironment @default(live)
-  label           String?           /// User-defined label for the key
-  last_used_at    DateTime?
-  is_active       Boolean           @default(true)
-  created_at      DateTime          @default(now())
-  revoked_at      DateTime?
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchant_id   String            @db.Uuid
+  key_id        String            @unique /// Public key: pk_live_xxx or pk_test_xxx
+  secret_hash   String /// bcrypt hash of sk_live_xxx or sk_test_xxx
+  secret_prefix String /// First 8 chars of secret payload (plaintext) for efficient lookup
+  environment   ApiKeyEnvironment @default(live)
+  label         String? /// User-defined label for the key
+  last_used_at  DateTime?
+  is_active     Boolean           @default(true)
+  created_at    DateTime          @default(now())
+  revoked_at    DateTime?
 
-  merchant        Merchant          @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
 
   @@index([key_id])
   @@index([merchant_id])
-  @@index([secret_prefix, environment, is_active])  /// Composite index for O(1) API key lookup
+  @@index([secret_prefix, environment, is_active]) /// Composite index for O(1) API key lookup
   @@map("api_keys")
 }
 
 /// Payments — core payment records with multi-provider support
 model Payment {
-  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  payment_ref             String          @unique   /// pay_{nanoid} — public reference
-  merchant_id             String          @db.Uuid
-  order_id                String?         /// Merchant's order reference
-  idempotency_key         String?         @unique   /// Idempotency-Key header value
+  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payment_ref             String            @unique /// pay_{nanoid} — public reference
+  merchant_id             String            @db.Uuid
+  environment             ApiKeyEnvironment @default(live)
+  order_id                String? /// Merchant's order reference
+  idempotency_key         String?           @unique /// Idempotency-Key header value
   channel                 PaymentChannel
-  status                  PaymentStatus   @default(pending)
-  amount                  Decimal         @db.Decimal(15, 2)
+  status                  PaymentStatus     @default(pending)
+  amount                  Decimal           @db.Decimal(15, 2)
   currency                Currency
-  fee_amount              Decimal?        @db.Decimal(15, 2) /// Platform fee taken
-  fee_rate                Decimal?        @db.Decimal(5, 4)  /// Fee percentage (0.0250 for 2.5%)
-  net_amount              Decimal?        @db.Decimal(15, 2) /// amount - fee_amount
+  fee_amount              Decimal?          @db.Decimal(15, 2) /// Platform fee taken
+  fee_rate                Decimal?          @db.Decimal(5, 4) /// Fee percentage (0.0250 for 2.5%)
+  net_amount              Decimal?          @db.Decimal(15, 2) /// amount - fee_amount
   description             String?
   customer_email          String?
   customer_phone          String?
   customer_name           String?
-  provider_transaction_id String?         /// MonCash/NatCash/Stripe transaction ID
-  provider_redirect_url   String?         /// Redirect URL for mobile wallets
-  provider_response       Json?           /// Raw provider response (JSONB)
-  refunded_amount         Decimal         @default(0) @db.Decimal(15, 2)
-  metadata                Json?           /// Custom metadata from merchant (JSONB)
-  expires_at              DateTime?       /// Payment link expiry
+  customer_id             String?           @db.Uuid
+  invoice_id              String?           @unique @db.Uuid /// If this payment was for an invoice
+  provider_transaction_id String? /// MonCash/NatCash/Stripe transaction ID
+  provider_redirect_url   String? /// Redirect URL for mobile wallets
+  provider_response       Json? /// Raw provider response (JSONB)
+  refunded_amount         Decimal           @default(0) @db.Decimal(15, 2)
+  metadata                Json? /// Custom metadata from merchant (JSONB)
+  expires_at              DateTime? /// Payment link expiry
   completed_at            DateTime?
   failed_at               DateTime?
   failure_reason          String?
-  created_at              DateTime        @default(now())
-  updated_at              DateTime        @updatedAt
+  created_at              DateTime          @default(now())
+  updated_at              DateTime          @updatedAt
 
-  merchant                Merchant        @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
-  transactions            Transaction[]
-  webhook_logs            WebhookLog[]
+  merchant     Merchant      @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
+  customer     Customer?     @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  invoice      Invoice?      @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+  webhook_logs WebhookLog[]
 
   @@index([payment_ref])
   @@index([merchant_id])
+  @@index([customer_id])
+  @@index([environment])
   @@index([status])
   @@index([channel])
   @@index([order_id])
   @@index([created_at])
-  @@index([merchant_id, created_at])
-  @@index([merchant_id, status])
+  @@index([merchant_id, environment, created_at])
+  @@index([merchant_id, environment, status])
   @@map("payments")
 }
 
 /// Transactions — accounting ledger entries (every payment creates debit + credit entries)
 model Transaction {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  transaction_ref String            @unique   /// txn_{nanoid} — public reference
-  payment_id      String            @db.Uuid
+  transaction_ref String            @unique /// txn_{nanoid} — public reference
+  payment_id      String?           @db.Uuid
+  payout_id       String?           @db.Uuid
   merchant_id     String            @db.Uuid
+  environment     ApiKeyEnvironment @default(live)
   type            TransactionType
   status          TransactionStatus @default(pending)
   amount          Decimal           @db.Decimal(15, 2)
   currency        Currency
   description     String?
-  metadata        Json?             /// Extra context (JSONB)
+  metadata        Json? /// Extra context (JSONB)
   created_at      DateTime          @default(now())
   updated_at      DateTime          @updatedAt
 
-  payment         Payment           @relation(fields: [payment_id], references: [id], onDelete: Restrict)
-  merchant        Merchant          @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
+  payment  Payment? @relation(fields: [payment_id], references: [id], onDelete: Restrict)
+  payout   Payout?  @relation(fields: [payout_id], references: [id], onDelete: Restrict)
+  merchant Merchant @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
 
   @@index([transaction_ref])
   @@index([payment_id])
+  @@index([payout_id])
   @@index([merchant_id])
+  @@index([environment])
   @@index([type])
   @@index([created_at])
-  @@index([merchant_id, created_at])
+  @@index([merchant_id, environment, created_at])
   @@map("transactions")
 }
 
 /// KYC submissions — document upload and verification tracking
 model KycSubmission {
-  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  merchant_id     String      @db.Uuid
-  status          KycStatus   @default(pending)
-  document_type   String      /// CIN_RECTO, CIN_VERSO, PATENTE, NIF_ATTESTATION
-  document_url    String      /// S3/storage URL
-  file_name       String?
-  file_size       Int?        /// Bytes
-  mime_type       String?
-  reviewer_notes  String?
-  reviewed_by     String?     @db.Uuid
-  reviewed_at     DateTime?
-  submitted_at    DateTime    @default(now())
-  created_at      DateTime    @default(now())
-  updated_at      DateTime    @updatedAt
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchant_id    String    @db.Uuid
+  status         KycStatus @default(pending)
+  document_type  String /// CIN_RECTO, CIN_VERSO, PATENTE, NIF_ATTESTATION
+  document_url   String /// S3/storage URL
+  file_name      String?
+  file_size      Int? /// Bytes
+  mime_type      String?
+  reviewer_notes String?
+  reviewed_by    String?   @db.Uuid
+  reviewed_at    DateTime?
+  submitted_at   DateTime  @default(now())
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
 
-  merchant        Merchant    @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
 
   @@index([merchant_id])
   @@index([status])
@@ -267,17 +297,17 @@ model KycSubmission {
 
 /// Webhook configs — merchants define their webhook endpoints here
 model WebhookConfig {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  merchant_id     String    @db.Uuid
-  url             String    /// Target URL
-  secret          String    /// HMAC signing secret for this endpoint
-  events          String[]  /// Array of event types: payment.completed, payment.failed, etc.
-  is_active       Boolean   @default(true)
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchant_id String   @db.Uuid
+  url         String /// Target URL
+  secret      String /// HMAC signing secret for this endpoint
+  events      String[] /// Array of event types: payment.completed, payment.failed, etc.
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
-  merchant        Merchant  @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
-  webhook_logs    WebhookLog[]
+  merchant     Merchant     @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
+  webhook_logs WebhookLog[]
 
   @@index([merchant_id])
   @@map("webhook_configs")
@@ -285,23 +315,23 @@ model WebhookConfig {
 
 /// Webhook delivery log — tracks each delivery attempt
 model WebhookLog {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  webhook_config_id String      @db.Uuid
-  payment_id      String        @db.Uuid
-  event_type      String        /// payment.completed, payment.failed, etc.
-  payload         Json          /// Full webhook payload sent
-  status          WebhookStatus @default(pending)
-  http_status     Int?          /// Response HTTP status code
-  response_body   String?       /// Response body (truncated)
-  attempt_count   Int           @default(1)
-  max_attempts    Int           @default(5)
-  last_attempt_at DateTime      @default(now())
-  next_retry_at   DateTime?
-  delivered_at    DateTime?
-  created_at      DateTime      @default(now())
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhook_config_id String        @db.Uuid
+  payment_id        String        @db.Uuid
+  event_type        String /// payment.completed, payment.failed, etc.
+  payload           Json /// Full webhook payload sent
+  status            WebhookStatus @default(pending)
+  http_status       Int? /// Response HTTP status code
+  response_body     String? /// Response body (truncated)
+  attempt_count     Int           @default(1)
+  max_attempts      Int           @default(5)
+  last_attempt_at   DateTime      @default(now())
+  next_retry_at     DateTime?
+  delivered_at      DateTime?
+  created_at        DateTime      @default(now())
 
-  webhook_config  WebhookConfig @relation(fields: [webhook_config_id], references: [id], onDelete: Cascade)
-  payment         Payment       @relation(fields: [payment_id], references: [id], onDelete: Restrict)
+  webhook_config WebhookConfig @relation(fields: [webhook_config_id], references: [id], onDelete: Cascade)
+  payment        Payment       @relation(fields: [payment_id], references: [id], onDelete: Restrict)
 
   @@index([webhook_config_id])
   @@index([payment_id])
@@ -312,21 +342,119 @@ model WebhookLog {
 
 /// Team members — allows merchants to invite team members with roles
 model TeamMember {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  merchant_id     String        @db.Uuid   /// The merchant (org) they belong to
-  email           String
-  role            MerchantRole  @default(developer)
-  invited_by      String?       @db.Uuid
-  accepted_at     DateTime?
-  invite_token    String?       @unique
-  is_active       Boolean       @default(true)
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchant_id  String       @db.Uuid /// The merchant (org) they belong to
+  email        String
+  role         MerchantRole @default(developer)
+  invited_by   String?      @db.Uuid
+  accepted_at  DateTime?
+  invite_token String?      @unique
+  is_active    Boolean      @default(true)
+  created_at   DateTime     @default(now())
+  updated_at   DateTime     @updatedAt
 
-  merchant        Merchant      @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
 
   @@unique([merchant_id, email])
   @@index([merchant_id])
   @@index([email])
   @@map("team_members")
 }
+
+/// Customers — tracks unique customers across a merchant's payments
+model Customer {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchant_id      String            @db.Uuid
+  environment      ApiKeyEnvironment @default(live)
+  email            String?
+  phone            String?
+  name             String?
+  total_spent      Decimal           @default(0) @db.Decimal(15, 2)
+  payment_count    Int               @default(0)
+  first_payment_at DateTime?
+  last_payment_at  DateTime?
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  merchant Merchant  @relation(fields: [merchant_id], references: [id], onDelete: Cascade)
+  payments Payment[]
+  invoices Invoice[]
+
+  @@index([merchant_id, environment])
+  @@index([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+/// Payouts — withdrawal requests to merchant bank accounts
+model Payout {
+  id                  String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payout_ref          String       @unique /// po_{nanoid}
+  merchant_id         String       @db.Uuid
+  amount              Decimal      @db.Decimal(15, 2)
+  currency            Currency
+  status              PayoutStatus @default(pending)
+  bank_name           String
+  bank_account_number String
+  bank_account_holder String
+  external_ref        String?      /// Bank reference after manual processing
+  admin_notes         String?
+  processed_by        String?      @db.Uuid /// SuperAdmin ID
+  requested_at        DateTime     @default(now())
+  processed_at        DateTime?
+  failed_at           DateTime?
+
+  merchant     Merchant      @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
+  transactions Transaction[]
+
+  @@index([payout_ref])
+  @@index([merchant_id])
+  @@index([status])
+  @@index([requested_at])
+  @@map("payouts")
+}
+
+/// Invoices — billing documents sent to customers
+model Invoice {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_ref     String            @unique /// inv_{nanoid}
+  merchant_id     String            @db.Uuid
+  customer_id     String            @db.Uuid
+  environment     ApiKeyEnvironment @default(live)
+  status          InvoiceStatus     @default(draft)
+  amount          Decimal           @db.Decimal(15, 2)
+  currency        Currency          @default(HTG)
+  due_date        DateTime?
+  notes           String?
+  payment_link_id String?           /// Related public payment link for this invoice
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  merchant        Merchant          @relation(fields: [merchant_id], references: [id], onDelete: Restrict)
+  customer        Customer          @relation(fields: [customer_id], references: [id], onDelete: Restrict)
+  items           InvoiceItem[]
+  payment         Payment?          /// Payment that settled this invoice
+
+  @@index([invoice_ref])
+  @@index([merchant_id, environment])
+  @@index([customer_id])
+  @@index([status])
+  @@map("invoices")
+}
+
+/// Invoice Items — individual line items on an invoice
+model InvoiceItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_id  String   @db.Uuid
+  description String
+  quantity    Int      @default(1)
+  unit_price  Decimal  @db.Decimal(15, 2)
+  amount      Decimal  @db.Decimal(15, 2) /// quantity * unit_price
+  created_at  DateTime @default(now())
+
+  invoice     Invoice  @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id])
+  @@map("invoice_items")
+}
+
