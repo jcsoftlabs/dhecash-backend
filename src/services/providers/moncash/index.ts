@@ -22,7 +22,12 @@ interface MonCashTokenResponse {
 interface MonCashCreatePaymentResponse {
     mode: string;
     path: string;
-    payment: {
+    payment_token?: {
+        expired: string;
+        created: string;
+        token: string;
+    };
+    payment?: { // Fallback for older API versions
         Reference: string;
         transactionId: string;
         cost: number;
@@ -81,7 +86,7 @@ class MonCashService {
             ).toString('base64');
 
             const response = await axios.post<MonCashTokenResponse>(
-                `${config.MONCASH_BASE_URL}/oauth/token`,
+                `${config.MONCASH_BASE_URL}/Api/oauth/token`,
                 'scope=read,write&grant_type=client_credentials',
                 {
                     headers: {
@@ -140,19 +145,41 @@ class MonCashService {
                 }
             );
 
-            const { payment, path } = response.data;
-            const redirectUrl = `${config.MONCASH_BASE_URL}${path}`;
+            const { payment, payment_token } = response.data;
+            let transactionId = '';
+            let reference = params.orderId || params.paymentRef;
+            let redirectUrl = '';
+
+            if (payment_token && payment_token.token) {
+                // Parse JWT to extract transaction ID (id field)
+                try {
+                    const payloadB64 = payment_token.token.split('.')[1];
+                    const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString());
+                    transactionId = payload.id;
+                    reference = payload.ref || reference;
+                } catch (e) {
+                    logger.warn('MonCash: failed to parse payment_token JWT', { token: payment_token.token });
+                }
+                // Build redirect URL according to Digicel doc
+                redirectUrl = `${config.MONCASH_BASE_URL}/Moncash-middleware/Checkout/Payment/Redirect?token=${payment_token.token}`;
+            } else if (payment) {
+                transactionId = payment.transactionId;
+                reference = payment.Reference || reference;
+                redirectUrl = `${config.MONCASH_BASE_URL}${response.data.path}?token=${payment.transactionId}`; // fallback
+            } else {
+                throw new Error('Invalid MonCash response structure');
+            }
 
             logger.info('MonCash paiement créé', {
-                transactionId: payment.transactionId,
-                reference: payment.Reference,
+                transactionId,
+                reference,
                 amount: htgAmount,
             });
 
             return {
-                provider_transaction_id: payment.transactionId,
+                provider_transaction_id: transactionId,
                 redirect_url: redirectUrl,
-                reference: payment.Reference,
+                reference: reference,
                 status: 'pending',
             };
         } catch (err: unknown) {
