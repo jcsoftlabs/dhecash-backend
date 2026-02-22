@@ -52,7 +52,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(cors, {
         origin: config.CORS_ORIGIN.split(','),
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'x-dhecash-environment'],
         credentials: true,
     });
 
