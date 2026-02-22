@@ -45,6 +45,7 @@ export interface AuthenticatedRequest extends FastifyRequest {
 // ─────────────────────────────────────
 const ROLE_PERMISSIONS: Record<MerchantRole, string[]> = {
     owner: ['*'], // All permissions
+    super_admin: ['*'], // Complete platform access
     admin: [
         'payments:read', 'payments:write', 'payments:refund',
         'transactions:read', 'transactions:export',
@@ -303,6 +304,23 @@ export const requirePermission = (permission: string) => {
             throw new ApiError('INSUFFICIENT_PERMISSIONS');
         }
     };
+};
+
+// ─────────────────────────────────────
+// Middleware: Super Admin Check
+// ─────────────────────────────────────
+export const requireSuperAdmin = async (request: AuthenticatedRequest, reply: FastifyReply) => {
+    if (!request.merchant) {
+        throw new ApiError('AUTH_REQUIRED');
+    }
+
+    if (request.merchant.role !== 'super_admin') {
+        logger.warn('Tentative d\'accès non autorisée au panel Admin', {
+            user_id: request.merchant.id,
+            role: request.merchant.role,
+        });
+        throw new ApiError('INSUFFICIENT_PERMISSIONS');
+    }
 };
 
 // ─────────────────────────────────────

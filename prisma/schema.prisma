@@ -102,6 +102,7 @@ enum MerchantRole {
   owner
   admin
   developer
+  super_admin
 }
 
 // ─────────────────────────────────────

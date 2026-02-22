@@ -21,6 +21,7 @@ import { checkoutRoutes } from './routes/checkout';
 import { customerRoutes } from './routes/customers';
 import { payoutRoutes } from './routes/payouts';
 import { invoiceRoutes } from './routes/invoices';
+import { adminRoutes } from './routes/admin';
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
@@ -116,11 +117,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(paymentRoutes);
     await app.register(transactionRoutes);
     await app.register(merchantRoutes);
-    await app.register(webhookRoutes);
-    await app.register(checkoutRoutes);
-    await app.register(customerRoutes);
-    await app.register(payoutRoutes);
-    await app.register(invoiceRoutes);
+    await app.register(webhookRoutes, { prefix: '/v1/webhooks' });
+    await app.register(checkoutRoutes, { prefix: '/v1/checkout' });
+    await app.register(customerRoutes, { prefix: '/v1/customers' });
+    await app.register(payoutRoutes, { prefix: '/v1/payouts' });
+    await app.register(invoiceRoutes, { prefix: '/v1/invoices' });
+    await app.register(adminRoutes, { prefix: '/v1/admin' });
 
     // ─────────────────────────────────────
     // 404 & Error Handlinger
