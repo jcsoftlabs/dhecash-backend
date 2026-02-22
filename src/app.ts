@@ -16,12 +16,31 @@ import { authRoutes } from './routes/auth';
 import { paymentRoutes } from './routes/payments';
 import { transactionRoutes } from './routes/transactions';
 import { merchantRoutes } from './routes/merchants';
+import { webhookRoutes } from './routes/webhooks';
 
 export async function buildApp(): Promise<FastifyInstance> {
     const app = Fastify({
         logger: false, // We use Winston
         trustProxy: true,
     });
+
+    // ─────────────────────────────────────
+    // Raw body — required for Stripe webhook HMAC validation
+    // We attach the raw Buffer to request.rawBody before JSON parsing
+    // ─────────────────────────────────────
+    app.addContentTypeParser(
+        'application/json',
+        { parseAs: 'buffer' },
+        (req, body: Buffer, done) => {
+            // Attach raw bytes for webhook signature verification
+            (req as any).rawBody = body;
+            try {
+                done(null, JSON.parse(body.toString('utf8')));
+            } catch (err) {
+                done(new Error('JSON invalide'), undefined);
+            }
+        }
+    );
 
     // ─────────────────────────────────────
     // Security plugins
@@ -93,6 +112,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await app.register(paymentRoutes);
     await app.register(transactionRoutes);
     await app.register(merchantRoutes);
+    await app.register(webhookRoutes);
 
     // ─────────────────────────────────────
     // Global error handler
