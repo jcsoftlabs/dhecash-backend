@@ -169,6 +169,7 @@ export async function paymentRoutes(fastify: FastifyInstance) {
                 customer_phone: true,
                 customer_name: true,
                 provider_transaction_id: true,
+                provider_redirect_url: true,
                 refunded_amount: true,
                 metadata: true,
                 expires_at: true,
