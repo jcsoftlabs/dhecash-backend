@@ -105,9 +105,11 @@ class MonCashService {
 
             return access_token;
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
+            const message = axios.isAxiosError(err)
+                ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+                : err instanceof Error ? err.message : 'Unknown error';
             logger.error('Erreur obtention token MonCash', { error: message });
-            throw new ApiError('PROVIDER_ERROR');
+            throw new Error(`MonCash Auth Error: ${message}`);
         }
     }
 
@@ -184,12 +186,11 @@ class MonCashService {
             };
         } catch (err: unknown) {
             if (err instanceof ApiError) throw err;
-            const message = err instanceof Error ? err.message : 'Unknown';
+            const message = axios.isAxiosError(err)
+                ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+                : err instanceof Error ? err.message : 'Unknown';
             logger.error('Erreur création paiement MonCash', { error: message });
-            if (axios.isAxiosError(err) && err.response?.status === 408) {
-                throw new ApiError('PROVIDER_TIMEOUT');
-            }
-            throw new ApiError('PROVIDER_ERROR');
+            throw new Error(`MonCash Create Error: ${message}`);
         }
     }
 
