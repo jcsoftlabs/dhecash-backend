@@ -10,6 +10,7 @@ import { prisma } from '../../utils/prisma';
 import { logger } from '../../utils/logger';
 import { stripeService } from '../../services/providers/stripe';
 import { notificationService } from '../../services/notification';
+import { sendPaymentSuccessEmail } from '../../services/email';
 import { generateTransactionRef } from '../../utils/ids';
 
 // Augment FastifyRequest to include rawBody set by our content-type parser
@@ -35,7 +36,8 @@ async function updatePaymentStatus(
 ): Promise<string | null> {
     const payment = await prisma.payment.findFirst({
         where: { provider_transaction_id },
-    });
+        include: { merchant: { select: { business_name: true, first_name: true, last_name: true, email: true } } }
+    }) as any; // Type override for relation inference
 
     if (!payment) {
         logger.warn('Webhook: paiement introuvable', { provider_transaction_id });
@@ -155,6 +157,18 @@ async function updatePaymentStatus(
 
             logger.info('Customer list mis à jour', { customer_id: customer.id, payment_ref: payment.payment_ref });
         }
+
+        // ─── Email Notification to Merchant ───
+        const merchantName = payment.merchant?.business_name || payment.merchant?.first_name || 'Marchand';
+        await sendPaymentSuccessEmail({
+            to: payment.merchant.email,
+            merchantName,
+            amount: Number(payment.amount),
+            currency: payment.currency,
+            paymentRef: payment.payment_ref,
+            customerEmail: payment.customer_email,
+            customerName: payment.customer_name
+        });
     }
 
     return payment.payment_ref;
