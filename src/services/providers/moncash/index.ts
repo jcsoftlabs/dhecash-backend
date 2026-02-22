@@ -99,8 +99,9 @@ class MonCashService {
 
             const { access_token, expires_in } = response.data;
 
-            // Cache with 60-second buffer before real expiry
-            await redis.set(MONCASH_TOKEN_KEY, access_token, 'EX', expires_in - 60);
+            // Cache token — guard against expires_in ≤ 60s to prevent Redis ERR negative TTL
+            const ttl = Math.max(expires_in - 60, 30);
+            await redis.set(MONCASH_TOKEN_KEY, access_token, 'EX', ttl);
             logger.info('🔑 MonCash token OAuth2 obtenu');
 
             return access_token;
