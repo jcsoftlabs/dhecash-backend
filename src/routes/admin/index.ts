@@ -15,7 +15,7 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     // Global platform overview (Volumes & Commissions)
     // ─────────────────────────────────────
     app.get('/metrics', async (request, reply) => {
-        // Query distinct providers
+        // Query distinct providers (excluding super_admins)
         const [
             totalMerchants,
             totalCustomers,
@@ -23,7 +23,7 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
             aggregateVolume,
             recentPayouts
         ] = await Promise.all([
-            prisma.merchant.count(),
+            prisma.merchant.count({ where: { role: { not: 'super_admin' } } }),
             prisma.customer.count(),
             prisma.payment.count({ where: { status: 'completed' } }),
             prisma.payment.aggregate({
@@ -92,7 +92,7 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         const query = listingSchema.parse(request.query);
         const skip = (query.page - 1) * query.limit;
 
-        const where: any = {};
+        const where: any = { role: { not: 'super_admin' } };
         if (query.search) {
             where.OR = [
                 { email: { contains: query.search, mode: 'insensitive' } },
