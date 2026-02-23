@@ -187,6 +187,7 @@ export async function authRoutes(fastify: FastifyInstance) {
                 email: merchant.email,
                 type: merchant.type,
                 status: merchant.status,
+                role: merchant.role,
                 name: merchant.type === 'business'
                     ? merchant.business_name
                     : `${merchant.first_name} ${merchant.last_name}`,
