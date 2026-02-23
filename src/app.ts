@@ -50,8 +50,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     // ─────────────────────────────────────
     // Security plugins
     // ─────────────────────────────────────
+    const origins = [...config.CORS_ORIGIN.split(','), 'http://localhost:3002'];
     await app.register(cors, {
-        origin: config.CORS_ORIGIN.split(','),
+        origin: origins,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'x-dhecash-environment'],
         credentials: true,
